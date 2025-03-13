@@ -1,23 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import sqlite3
+import os
 
 app = Flask(__name__)
 
 def init_db():
-    with sqlite3.connect("votes.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS projects (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            name TEXT UNIQUE,
-                            innovation INTEGER DEFAULT 0,
-                            presentation INTEGER DEFAULT 0,
-                            business_impact INTEGER DEFAULT 0,
-                            total_votes INTEGER DEFAULT 0)''')
-        conn.commit()
-        cursor.executemany("INSERT OR IGNORE INTO projects (name) VALUES (?)", 
-                           [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)])
-        conn.commit()
-
+    db_path = "votes.db"
+    if not os.path.exists(db_path):  # Ensure the database file exists
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS projects (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                name TEXT UNIQUE,
+                                innovation INTEGER DEFAULT 0,
+                                presentation INTEGER DEFAULT 0,
+                                business_impact INTEGER DEFAULT 0,
+                                total_votes INTEGER DEFAULT 0)''')
+            conn.commit()
+            cursor.executemany("INSERT OR IGNORE INTO projects (name) VALUES (?)", 
+                               [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)])
+            conn.commit()
+    else:
+        print("Database already exists.")
 def get_projects():
     with sqlite3.connect("votes.db") as conn:
         cursor = conn.cursor()
