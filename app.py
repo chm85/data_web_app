@@ -4,10 +4,13 @@ import os
 
 app = Flask(__name__)
 
+# Use persistent storage in Azure
+DB_PATH = "/home/votes.db"
+
 def init_db():
-    db_path = "votes.db"
-    if not os.path.exists(db_path):  # Ensure the database file exists
-        with sqlite3.connect(db_path) as conn:
+    """ Initialize the database and ensure the table exists. """
+    if not os.path.exists(DB_PATH):
+        with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute('''CREATE TABLE IF NOT EXISTS projects (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,15 +24,22 @@ def init_db():
                                [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)])
             conn.commit()
     else:
-        print("Database already exists.")
+        print("Database already exists at:", DB_PATH)
+
+def get_db_connection():
+    """ Get a connection to the database. """
+    return sqlite3.connect(DB_PATH)
+
 def get_projects():
-    with sqlite3.connect("votes.db") as conn:
+    """ Fetch all projects from the database. """
+    with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
         return cursor.fetchall()
 
 def update_vote(project_id, innovation, presentation, business_impact):
-    with sqlite3.connect("votes.db") as conn:
+    """ Update the vote for a project without increasing total votes on edit. """
+    with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT total_votes FROM projects WHERE id = ?", (project_id,))
         total_votes = cursor.fetchone()[0]
@@ -42,13 +52,15 @@ def update_vote(project_id, innovation, presentation, business_impact):
         conn.commit()
 
 def edit_vote(project_id, innovation, presentation, business_impact):
-    with sqlite3.connect("votes.db") as conn:
+    """ Allow editing votes without increasing total votes. """
+    with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("UPDATE projects SET innovation = ?, presentation = ?, business_impact = ? WHERE id = ?", 
                         (innovation, presentation, business_impact, project_id))
         conn.commit()
 
 def get_leaderboard_data():
+    """ Retrieve leaderboard data sorted by score. """
     projects = get_projects()
     leaderboard_data = [{
         "name": p[1],
@@ -86,7 +98,7 @@ def edit_vote_route():
 def add_project():
     project_name = request.form.get("project_name")
     if project_name:
-        with sqlite3.connect("votes.db") as conn:
+        with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT OR IGNORE INTO projects (name) VALUES (?)", (project_name,))
             conn.commit()
@@ -97,5 +109,5 @@ def leaderboard_data():
     return jsonify(get_leaderboard_data())
 
 if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+    init_db()  # Ensure database is initialized
+    app.run(host="0.0.0.0", port=8000, debug=True)
