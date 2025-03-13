@@ -5,12 +5,13 @@ import os
 app = Flask(__name__)
 
 # Use persistent storage in Azure
-DB_PATH = "/home/votes.db"
+DB_PATH = "/home/votes2.db"
 
 def init_db():
     """ Initialize the database and ensure the table exists. """
     if not os.path.exists(DB_PATH):
         with sqlite3.connect(DB_PATH) as conn:
+            print("Creating database at:", DB_PATH)
             cursor = conn.cursor()
             cursor.execute('''CREATE TABLE IF NOT EXISTS projects (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
