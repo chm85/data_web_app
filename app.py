@@ -110,4 +110,13 @@ def leaderboard_data():
 
 if __name__ == '__main__':
     init_db()  # Ensure database is initialized
+    print("Current Working Directory:", os.getcwd())
+    from pathlib import Path
+
+    directory = Path("/path/to/directory")  # Replace with your target directory
+    files = [file.resolve() for file in directory.iterdir() if file.is_file()]
+
+    print("Files in directory:")
+    for file in files:
+        print(file)
     app.run(host="0.0.0.0", port=8000, debug=True)
