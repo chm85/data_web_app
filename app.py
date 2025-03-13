@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 
 # Use persistent storage in Azure
-DB_PATH = "/home/votes.db"
+DB_PATH = "/tmp/votes.db"
 
 def init_db():
     """ Initialize the database and ensure the table exists. """
