@@ -4,6 +4,7 @@ import os
 
 app = Flask(__name__)
 
+# Temp update to  vault
 # PostgreSQL Connection Details (Replace with your own Azure DB info)
 DB_HOST = os.getenv("PGHOST", "hackathon-fun-server.postgres.database.azure.com")
 DB_NAME =  os.getenv("PGDATABASE", "postgres")
