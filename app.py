@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 # Set a secret key for session encryption (store securely in Azure)
 app.secret_key = os.getenv("SECRET_KEY")
+app.config['SESSION_PERMANENT'] = True  # Ensure session persists
 
 # Temp update to  vault
 # PostgreSQL Connection Details (Replace with your own Azure DB info)
@@ -30,7 +31,7 @@ def get_db_connection():
 
 
 def init_db():
-    """Ensure the projects and votes tables exist."""
+    """ Ensure tables exist and initialize the database. """
     with get_db_connection() as conn, conn.cursor() as cursor:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS projects (
@@ -58,14 +59,6 @@ def init_db():
         conn.commit()
 
 
-def get_projects():
-    """ Fetch all projects from PostgreSQL. """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
-        return cursor.fetchall()
-
-
 @app.route('/')
 def index():
     projects = get_projects()
@@ -73,10 +66,19 @@ def index():
 
 
 def get_or_create_session():
-    """ Generate or retrieve a unique session ID for the user. """
+    """ Generate or retrieve a unique session ID per user session. """
     if 'session_id' not in session:
         session['session_id'] = str(uuid.uuid4())  # Generate a unique session ID
+        session.permanent = True  # Ensure it persists across refreshes
     return session['session_id']
+
+
+def get_projects():
+    """ Fetch all projects from PostgreSQL. """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
+        return cursor.fetchall()
 
 
 @app.route('/vote', methods=['POST'])
@@ -118,10 +120,7 @@ def edit_vote():
     innovation = int(request.form.get("innovation", 0))
     presentation = int(request.form.get("presentation", 0))
     business_impact = int(request.form.get("business_impact", 0))
-    session_id = session.get('session_id')  # Get session ID
-
-    if not session_id:
-        return "❌ You have not voted yet!", 403  # Prevent edits if no session exists
+    session_id = get_or_create_session()
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -146,13 +145,22 @@ def edit_vote():
 @app.route('/leaderboard_data', methods=['GET'])
 def leaderboard_data():
     """ Retrieve leaderboard data sorted by score. """
-    projects = get_projects()
-    leaderboard_data = [{
-        "name": p[1],
-        "average_score": round((p[2] + p[3] + p[4]) / (3 * max(1, p[5])), 2) if p[5] > 0 else 0,
-        "total_votes": p[5]
-    } for p in projects]
-    return jsonify(leaderboard_data)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Calculate average score properly
+        cursor.execute("""
+            SELECT p.name, 
+                   COALESCE(ROUND(AVG((v.innovation + v.presentation + v.business_impact) / 3.0), 2), 0) AS avg_score,
+                   COUNT(v.id) AS total_votes
+            FROM projects p
+            LEFT JOIN votes v ON p.id = v.project_id
+            GROUP BY p.id
+            ORDER BY avg_score DESC;
+        """)
+        leaderboard = cursor.fetchall()
+
+    return jsonify([{"name": row[0], "average_score": row[1], "total_votes": row[2]} for row in leaderboard])
 
 
 if __name__ == '__main__':

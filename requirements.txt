@@ -1,3 +1,4 @@
 pysqlite3
 flask
 psycopg2
+pandas
