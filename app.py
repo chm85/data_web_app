@@ -1,15 +1,19 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, session, render_template, request, redirect, url_for, jsonify
 import psycopg2
 import os
+import uuid
 
 app = Flask(__name__)
+
+# Set a secret key for session encryption (store securely in Azure)
+app.secret_key = os.getenv("SECRET_KEY")
 
 # Temp update to  vault
 # PostgreSQL Connection Details (Replace with your own Azure DB info)
 DB_HOST = os.getenv("PGHOST", "hackathon-fun-server.postgres.database.azure.com")
 DB_NAME =  os.getenv("PGDATABASE", "postgres")
 DB_USER = os.getenv("PGUSER", "lfcqxcirwp")
-DB_PASSWORD = os.getenv("PGPASSWORD", "80lR'1M'l_f+") 
+DB_PASSWORD = os.getenv("PGPASSWORD") 
 DB_PORT = os.getenv("PGPORT", "5432")
 
 
@@ -24,10 +28,10 @@ def get_db_connection():
         sslmode="require"  # Required for Azure
     )
 
+
 def init_db():
-    """ Ensure database and tables exist. """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
+    """Ensure the projects and votes tables exist."""
+    with get_db_connection() as conn, conn.cursor() as cursor:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
@@ -38,13 +42,21 @@ def init_db():
                 total_votes INTEGER DEFAULT 0
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS votes (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                innovation INTEGER NOT NULL,
+                presentation INTEGER NOT NULL,
+                business_impact INTEGER NOT NULL,
+                UNIQUE (project_id, session_id)  -- Prevent duplicate votes per user
+            )
+        ''')
+        default_projects = [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)]
+        cursor.executemany("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", default_projects)
         conn.commit()
 
-        cursor.execute("SELECT COUNT(*) FROM projects")
-        if cursor.fetchone()[0] == 0:  # If no projects exist, insert default ones
-            cursor.executemany("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", 
-                               [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)])
-            conn.commit()
 
 def get_projects():
     """ Fetch all projects from PostgreSQL. """
@@ -53,29 +65,86 @@ def get_projects():
         cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
         return cursor.fetchall()
 
-def update_vote(project_id, innovation, presentation, business_impact):
-    """ Update the vote for a project without increasing total votes on edit. """
+
+@app.route('/')
+def index():
+    projects = get_projects()
+    return render_template('index.html', projects=projects)
+
+
+def get_or_create_session():
+    """ Generate or retrieve a unique session ID for the user. """
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())  # Generate a unique session ID
+    return session['session_id']
+
+
+@app.route('/vote', methods=['POST'])
+def vote():
+    """ Handles voting while preventing multiple votes per user. """
+    project_id = request.form.get("project_id")
+    innovation = int(request.form.get("innovation", 0))
+    presentation = int(request.form.get("presentation", 0))
+    business_impact = int(request.form.get("business_impact", 0))
+    session_id = get_or_create_session()
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT total_votes FROM projects WHERE id = %s", (project_id,))
-        total_votes = cursor.fetchone()[0]
-        if total_votes == 0:
-            cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s, total_votes = 1 WHERE id = %s", 
-                            (innovation, presentation, business_impact, project_id))
-        else:
-            cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s WHERE id = %s", 
-                            (innovation, presentation, business_impact, project_id))
+
+        # Check if the user has already voted for this project
+        cursor.execute("SELECT * FROM votes WHERE project_id = %s AND session_id = %s", (project_id, session_id))
+        existing_vote = cursor.fetchone()
+
+        if existing_vote:
+            return "❌ You have already voted for this project!", 403  # Prevent duplicate votes
+
+        # Insert the vote with the session ID
+        cursor.execute(
+            "INSERT INTO votes (project_id, innovation, presentation, business_impact, session_id) VALUES (%s, %s, %s, %s, %s)",
+            (project_id, innovation, presentation, business_impact, session_id)
+        )
+
+        # Update total votes count for the project
+        cursor.execute("UPDATE projects SET total_votes = total_votes + 1 WHERE id = %s", (project_id,))
         conn.commit()
 
-def edit_vote(project_id, innovation, presentation, business_impact):
-    """ Allow editing votes without increasing total votes. """
+    return redirect(url_for('index'))
+
+
+@app.route('/edit_vote', methods=['POST'])
+def edit_vote():
+    """ Allow editing votes instead of creating new ones. """
+    project_id = request.form.get("project_id")
+    innovation = int(request.form.get("innovation", 0))
+    presentation = int(request.form.get("presentation", 0))
+    business_impact = int(request.form.get("business_impact", 0))
+    session_id = session.get('session_id')  # Get session ID
+
+    if not session_id:
+        return "❌ You have not voted yet!", 403  # Prevent edits if no session exists
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s WHERE id = %s", 
-                        (innovation, presentation, business_impact, project_id))
+
+        # Check if the user has already voted
+        cursor.execute("SELECT * FROM votes WHERE project_id = %s AND session_id = %s", (project_id, session_id))
+        existing_vote = cursor.fetchone()
+
+        if not existing_vote:
+            return "❌ You have not voted yet!", 403  # Ensure user has voted
+
+        # Update vote
+        cursor.execute(
+            "UPDATE votes SET innovation = %s, presentation = %s, business_impact = %s WHERE project_id = %s AND session_id = %s",
+            (innovation, presentation, business_impact, project_id, session_id)
+        )
         conn.commit()
 
-def get_leaderboard_data():
+    return redirect(url_for('index'))
+
+
+@app.route('/leaderboard_data', methods=['GET'])
+def leaderboard_data():
     """ Retrieve leaderboard data sorted by score. """
     projects = get_projects()
     leaderboard_data = [{
@@ -83,46 +152,8 @@ def get_leaderboard_data():
         "average_score": round((p[2] + p[3] + p[4]) / (3 * max(1, p[5])), 2) if p[5] > 0 else 0,
         "total_votes": p[5]
     } for p in projects]
-    return sorted(leaderboard_data, key=lambda x: x['average_score'], reverse=True)
+    return jsonify(leaderboard_data)
 
-@app.route('/')
-def index():
-    projects = get_projects()
-    return render_template('index.html', projects=projects)
-
-@app.route('/vote', methods=['POST'])
-def vote():
-    project_id = request.form.get("project_id")
-    innovation = int(request.form.get("innovation", 0))
-    presentation = int(request.form.get("presentation", 0))
-    business_impact = int(request.form.get("business_impact", 0))
-    if project_id:
-        update_vote(project_id, innovation, presentation, business_impact)
-    return redirect(url_for('index'))
-
-@app.route('/edit_vote', methods=['POST'])
-def edit_vote_route():
-    project_id = request.form.get("project_id")
-    innovation = int(request.form.get("innovation", 0))
-    presentation = int(request.form.get("presentation", 0))
-    business_impact = int(request.form.get("business_impact", 0))
-    if project_id:
-        edit_vote(project_id, innovation, presentation, business_impact)
-    return redirect(url_for('index'))
-
-@app.route('/add_project', methods=['POST'])
-def add_project():
-    project_name = request.form.get("project_name")
-    if project_name:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (project_name,))
-            conn.commit()
-    return redirect(url_for('index'))
-
-@app.route('/leaderboard_data', methods=['GET'])
-def leaderboard_data():
-    return jsonify(get_leaderboard_data())
 
 if __name__ == '__main__':
     init_db()  # Ensure database is initialized
