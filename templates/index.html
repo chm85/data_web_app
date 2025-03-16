@@ -43,10 +43,11 @@
             {% for project in projects %}
             <div class="card p-3 mb-3">
                 <strong>{{ project[1] }}</strong>
-                <span class="badge bg-success">{{ project[5] }} total votes</span>
+                <span class="badge bg-success">{{ project[2] }} total votes</span>
 
-                <!-- Voting Form -->
-                <form id="vote-form-{{ project[0] }}" action="/vote" method="post" {% if project[5] > 0 %}class="d-none"{% endif %}>
+                <!-- Voting Form (Only show if the user has NOT voted) -->
+                <form id="vote-form-{{ project[0] }}" action="/vote" method="post"
+                      {% if project[3] is not none %}class="d-none"{% endif %}>
                     <input type="hidden" name="project_id" value="{{ project[0] }}">
                     <div class="row mt-2">
                         <div class="col">
@@ -65,10 +66,27 @@
                     <button type="submit" class="btn btn-sm btn-primary mt-2">Vote</button>
                 </form>
 
-                <!-- Vote Submitted Section -->
-                <div id="vote-submitted-{{ project[0] }}" class="p-3 bg-light {% if project[5] == 0 %}d-none{% endif %}">
-                    <span>✅ Vote Submitted</span>
-                    <button class="btn btn-sm btn-secondary mt-2" onclick="toggleEditForm({{ project[0] }})">Edit Vote</button>
+                <!-- Vote Submitted Section (Only show if the user has voted) -->
+                <div id="vote-submitted-{{ project[0] }}" class="p-3 bg-light {% if project[3] is none %}d-none{% endif %}">
+                    <span>✅ Your Vote: Innovation ({{ project[3]|default('N/A') }}), Presentation ({{ project[4]|default('N/A') }}), Business Impact ({{ project[5]|default('N/A') }})</span>
+                    <form action="/edit_vote" method="post" class="mt-2">
+                        <input type="hidden" name="project_id" value="{{ project[0] }}">
+                        <div class="row">
+                            <div class="col">
+                                <label>Innovation (1-5):</label>
+                                <input type="number" name="innovation" min="1" max="5" class="form-control" value="{{ project[3] }}" required>
+                            </div>
+                            <div class="col">
+                                <label>Presentation (1-5):</label>
+                                <input type="number" name="presentation" min="1" max="5" class="form-control" value="{{ project[4] }}" required>
+                            </div>
+                            <div class="col">
+                                <label>Business Impact (1-5):</label>
+                                <input type="number" name="business_impact" min="1" max="5" class="form-control" value="{{ project[5] }}" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-secondary mt-2">Update Vote</button>
+                    </form>
                 </div>
             </div>
             {% endfor %}

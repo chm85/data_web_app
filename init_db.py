@@ -20,8 +20,6 @@ def get_db_connection():
         sslmode="require"  # Required for Azure
     )
 
-
-
 def init_db():
     """ Ensure tables exist and initialize the database. """
     with get_db_connection() as conn, conn.cursor() as cursor:
@@ -51,48 +49,3 @@ def init_db():
         conn.commit()
 
 init_db()
-
-def execute_query(query, params=None):
-    """Execute a SQL query and return the results if applicable."""
-    with get_db_connection() as conn, conn.cursor() as cursor:
-        cursor.execute(query, params or ())
-        if query.strip().lower().startswith("select"):
-            return cursor.fetchall()  # Return results for SELECT queries
-        conn.commit()  # Commit changes for INSERT, UPDATE, DELETE
-        print("Query executed successfully.")
-
-def list_tables():
-    """List all tables in the database."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Query to get table names
-        cursor.execute("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public'
-        """)
-        
-        tables = cursor.fetchall()
-        
-        print("Tables in the database:")
-        for table in tables:
-            print(table[0])
-        
-        cursor.close()
-        conn.close()
-    
-    except Exception as e:
-        print(f"Error: {e}")
-
-list_tables()
- 
-def drop_table(table_name):
-    """Drop the specified table if it exists."""
-    with get_db_connection() as conn, conn.cursor() as cursor:
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
-        conn.commit()
-        print(f"Table '{table_name}' dropped successfully.")
-
-list_tables()

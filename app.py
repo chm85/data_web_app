@@ -74,12 +74,23 @@ def get_or_create_session():
 
 
 def get_projects():
-    """ Fetch all projects from PostgreSQL. """
+    """ Fetch all projects and check if the current user has voted. """
+    session_id = session.get('session_id')  # Get current session ID
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
-        return cursor.fetchall()
 
+        # Fetch projects and check if the current user has voted for each one
+        cursor.execute("""
+            SELECT p.id, p.name, p.total_votes,
+                   COALESCE(v.innovation, NULL), COALESCE(v.presentation, NULL), COALESCE(v.business_impact, NULL)
+            FROM projects p
+            LEFT JOIN votes v ON p.id = v.project_id AND v.session_id = %s
+            ORDER BY p.id ASC
+        """, (session_id,))
+        projects = cursor.fetchall()
+
+    return projects
 
 @app.route('/vote', methods=['POST'])
 def vote():
