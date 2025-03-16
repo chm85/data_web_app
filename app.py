@@ -11,11 +11,11 @@ app.config['SESSION_PERMANENT'] = True  # Ensure session persists
 
 # Temp update to  vault
 # PostgreSQL Connection Details (Replace with your own Azure DB info)
-DB_HOST = os.getenv("PGHOST", "hackathon-fun-server.postgres.database.azure.com")
+DB_HOST = os.getenv("PGHOST")
 DB_NAME =  os.getenv("PGDATABASE", "postgres")
-DB_USER = os.getenv("PGUSER", "lfcqxcirwp")
+DB_USER = os.getenv("PGUSER")
 DB_PASSWORD = os.getenv("PGPASSWORD") 
-DB_PORT = os.getenv("PGPORT", "5432")
+DB_PORT = os.getenv("PGPORT")
 
 
 def get_db_connection():
