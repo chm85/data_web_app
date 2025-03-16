@@ -1,52 +1,38 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
-import psycopg2
+import sqlite3
 import os
 
 app = Flask(__name__)
 
-# PostgreSQL Connection Details (Replace with your own Azure DB info)
-DB_HOST = os.getenv("PGHOST", "hackathon-fun-server.postgres.database.azure.com")
-DB_NAME =  os.getenv("PGDATABASE", "postgres")
-DB_USER = os.getenv("PGUSER", "lfcqxcirwp")
-DB_PASSWORD = os.getenv("PGPASSWORD", "80lR'1M'l_f+") 
-DB_PORT = os.getenv("PGPORT", "5432")
-
-
-def get_db_connection():
-    """ Connect to PostgreSQL database """
-    return psycopg2.connect(
-        host=DB_HOST,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        port=DB_PORT,
-        sslmode="require"  # Required for Azure
-    )
+# Use persistent storage in Azure
+DB_PATH = "/home/votes2.db"
 
 def init_db():
-    """ Ensure database and tables exist. """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS projects (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE,
-                innovation INTEGER DEFAULT 0,
-                presentation INTEGER DEFAULT 0,
-                business_impact INTEGER DEFAULT 0,
-                total_votes INTEGER DEFAULT 0
-            )
-        ''')
-        conn.commit()
-
-        cursor.execute("SELECT COUNT(*) FROM projects")
-        if cursor.fetchone()[0] == 0:  # If no projects exist, insert default ones
-            cursor.executemany("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", 
+    """ Initialize the database and ensure the table exists. """
+    if not os.path.exists(DB_PATH):
+        with sqlite3.connect(DB_PATH) as conn:
+            print("Creating database at:", DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS projects (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                name TEXT UNIQUE,
+                                innovation INTEGER DEFAULT 0,
+                                presentation INTEGER DEFAULT 0,
+                                business_impact INTEGER DEFAULT 0,
+                                total_votes INTEGER DEFAULT 0)''')
+            conn.commit()
+            cursor.executemany("INSERT OR IGNORE INTO projects (name) VALUES (?)", 
                                [("AI Vision",), ("RPA",), ("AI Data Analyst",), ("Note App",)])
             conn.commit()
+    else:
+        print("Database already exists at:", DB_PATH)
+
+def get_db_connection():
+    """ Get a connection to the database. """
+    return sqlite3.connect(DB_PATH)
 
 def get_projects():
-    """ Fetch all projects from PostgreSQL. """
+    """ Fetch all projects from the database. """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, innovation, presentation, business_impact, total_votes FROM projects ORDER BY id ASC")
@@ -56,13 +42,13 @@ def update_vote(project_id, innovation, presentation, business_impact):
     """ Update the vote for a project without increasing total votes on edit. """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT total_votes FROM projects WHERE id = %s", (project_id,))
+        cursor.execute("SELECT total_votes FROM projects WHERE id = ?", (project_id,))
         total_votes = cursor.fetchone()[0]
         if total_votes == 0:
-            cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s, total_votes = 1 WHERE id = %s", 
+            cursor.execute("UPDATE projects SET innovation = ?, presentation = ?, business_impact = ?, total_votes = 1 WHERE id = ?", 
                             (innovation, presentation, business_impact, project_id))
         else:
-            cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s WHERE id = %s", 
+            cursor.execute("UPDATE projects SET innovation = ?, presentation = ?, business_impact = ? WHERE id = ?", 
                             (innovation, presentation, business_impact, project_id))
         conn.commit()
 
@@ -70,7 +56,7 @@ def edit_vote(project_id, innovation, presentation, business_impact):
     """ Allow editing votes without increasing total votes. """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE projects SET innovation = %s, presentation = %s, business_impact = %s WHERE id = %s", 
+        cursor.execute("UPDATE projects SET innovation = ?, presentation = ?, business_impact = ? WHERE id = ?", 
                         (innovation, presentation, business_impact, project_id))
         conn.commit()
 
@@ -115,7 +101,7 @@ def add_project():
     if project_name:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO projects (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (project_name,))
+            cursor.execute("INSERT OR IGNORE INTO projects (name) VALUES (?)", (project_name,))
             conn.commit()
     return redirect(url_for('index'))
 
@@ -125,5 +111,5 @@ def leaderboard_data():
 
 if __name__ == '__main__':
     init_db()  # Ensure database is initialized
-    print("Connecting to PostgreSQL at:", DB_HOST)
+    print("Current Working Directory:", os.getcwd())
     app.run(host="0.0.0.0", port=8000, debug=True)
