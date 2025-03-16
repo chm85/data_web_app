@@ -171,7 +171,11 @@ def leaderboard_data():
         """)
         leaderboard = cursor.fetchall()
 
-    return jsonify([{"name": row[0], "average_score": row[1], "total_votes": row[2]} for row in leaderboard])
+    # Format data correctly for Highcharts
+    return jsonify([
+        {"name": row[0], "average_score": row[1], "total_votes": row[2]}
+        for row in leaderboard
+    ])
 
 
 if __name__ == '__main__':

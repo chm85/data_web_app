@@ -13,23 +13,37 @@
         }
 
         function updateLeaderboard() {
-            fetch('/leaderboard_data')
-                .then(response => response.json())
-                .then(data => {
-                    Highcharts.chart('leaderboard-chart', {
+        fetch('/leaderboard_data')
+            .then(response => response.json())
+            .then(data => {
+                if (data.length === 0) {
+                    console.error("No leaderboard data available.");
+                    return;
+                }
+
+                // Check if the chart already exists
+                if (window.leaderboardChart) {
+                    // Update the existing chart
+                    window.leaderboardChart.series[0].setData(data.map(d => d.average_score), true);
+                    window.leaderboardChart.xAxis[0].setCategories(data.map(d => d.name), true);
+                } else {
+                    // Create the chart
+                    window.leaderboardChart = Highcharts.chart('leaderboard-chart', {
                         chart: { type: 'bar' },
                         title: { text: 'Hackathon Leaderboard' },
                         xAxis: { categories: data.map(d => d.name) },
                         yAxis: { title: { text: 'Average Score' }, min: 0, max: 5 },
                         series: [{ name: 'Avg Score', data: data.map(d => d.average_score) }]
                     });
-                });
-        }
+                }
+            })
+            .catch(error => console.error("Error loading leaderboard data:", error));
+    }
 
-        document.addEventListener("DOMContentLoaded", function() {
-            updateLeaderboard();
-            setInterval(updateLeaderboard, 5000);
-        });
+    document.addEventListener("DOMContentLoaded", function() {
+        updateLeaderboard();
+        setInterval(updateLeaderboard, 5000);
+    });
     </script>
 </head>
 <body class="container mt-5">
