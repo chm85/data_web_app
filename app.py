@@ -91,6 +91,7 @@ def index():
     projects = get_projects()
     return render_template('index.html', projects=projects)
 
+
 @app.route('/vote', methods=['POST'])
 def vote():
     """ Handles voting while preventing multiple votes per user. """
