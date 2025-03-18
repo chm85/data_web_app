@@ -3,7 +3,6 @@
 
 import pandas as pd
 import os
- 
 import psycopg2
 
 # Database connection details

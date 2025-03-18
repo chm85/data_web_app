@@ -2,7 +2,6 @@ from flask import Flask, session, render_template, request, redirect, url_for, j
 import psycopg2
 import os
 import uuid
-
 app = Flask(__name__)
 
 # Set a secret key for session encryption (store securely in Azure)
@@ -59,12 +58,6 @@ def init_db():
         conn.commit()
 
 
-@app.route('/')
-def index():
-    projects = get_projects()
-    return render_template('index.html', projects=projects)
-
-
 def get_or_create_session():
     """ Generate or retrieve a unique session ID per user session. """
     if 'session_id' not in session:
@@ -91,6 +84,12 @@ def get_projects():
         projects = cursor.fetchall()
 
     return projects
+
+
+@app.route('/')
+def index():
+    projects = get_projects()
+    return render_template('index.html', projects=projects)
 
 @app.route('/vote', methods=['POST'])
 def vote():
